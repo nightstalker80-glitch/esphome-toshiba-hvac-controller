@@ -520,7 +520,10 @@ class ToshibaController final : public climate::Climate, public Component {
         }
     }
 
-    void handle_register_power_selection(ToshibaPowerSelection value) {
+void handle_register_power_selection(ToshibaPowerSelection value) {
+        // Update internal state BEFORE publish_state to prevent write-back loop:
+        // publish_state triggers on_value -> set_power_select -> checks internal_power_selection_
+        this->internal_power_selection_ = value;
         switch (value) {
             case ToshibaPowerSelection::POWER_50:
                 ESP_LOGI(TAG, "[REGISTER] received power select: %s", "50%");
@@ -539,7 +542,6 @@ class ToshibaController final : public climate::Climate, public Component {
                          format_hex_pretty((uint8_t)value).c_str());
                 break;
         }
-        this->internal_power_selection_ = value;
     }
 
     void handle_register_room_temperature(uint8_t value) {
@@ -1094,38 +1096,32 @@ public:
     ///////////////////////////////////////////
     // CUSTOM ENTITY SELECTS
     ///////////////////////////////////////////
-    void set_power_select(int power) {
+void set_power_select(int power) {
         if (!is_initialized_) {
-           ESP_LOGE(TAG, "not initialized yet, ignoring power select command");
-           return;
+            ESP_LOGE(TAG, "not initialized yet, ignoring power select command");
+            return;
         }
 
-    ToshibaPowerSelection new_selection;
+        ToshibaPowerSelection new_selection;
         switch (power) {
-           case 0:
-               new_selection = ToshibaPowerSelection::POWER_50;
-               break;
-           case 1:
-               new_selection = ToshibaPowerSelection::POWER_75;
-               break;
-           case 2:
-               new_selection = ToshibaPowerSelection::POWER_100;
-               break;
-           default:
-               ESP_LOGE(TAG, "Unexpected power selection: %d", power);
-               return;
-       }
+            case 0: new_selection = ToshibaPowerSelection::POWER_50;  break;
+            case 1: new_selection = ToshibaPowerSelection::POWER_75;  break;
+            case 2: new_selection = ToshibaPowerSelection::POWER_100; break;
+            default:
+                ESP_LOGE(TAG, "Unexpected power selection: %d", power);
+                return;
+        }
 
-    // Skip write if value unchanged (prevents write-back loop when AC
-    // sends spontaneous power select push notifications)
-    if (new_selection == this->internal_power_selection_) {
-        ESP_LOGD(TAG, "power select unchanged, skipping write");
-           return;
-       }
+        // Skip write if value unchanged (prevents write-back loop when AC
+        // sends spontaneous power select push notifications)
+        if (new_selection == this->internal_power_selection_) {
+            ESP_LOGD(TAG, "power select unchanged, skipping write");
+            return;
+        }
 
-    this->internal_power_selection_ = new_selection;
-    this->request_write_register_(ToshibaCommand::POWER_SELECT, this->internal_power_selection_);
-}
+        this->internal_power_selection_ = new_selection;
+        this->request_write_register_(ToshibaCommand::POWER_SELECT, this->internal_power_selection_);
+    }
 
     void set_swing_mode_select(int mode) {
         if (!is_initialized_) {
