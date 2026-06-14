@@ -1096,28 +1096,36 @@ public:
     ///////////////////////////////////////////
     void set_power_select(int power) {
         if (!is_initialized_) {
-            ESP_LOGE(TAG, "not initialized yet, ignoring power select command");
-            return;
+           ESP_LOGE(TAG, "not initialized yet, ignoring power select command");
+           return;
         }
 
-        // implement the index function as switch
+    ToshibaPowerSelection new_selection;
         switch (power) {
-            case 0:
-                this->internal_power_selection_ = ToshibaPowerSelection::POWER_50;
-                break;
-            case 1:
-                this->internal_power_selection_ = ToshibaPowerSelection::POWER_75;
-                break;
-            case 2:
-                this->internal_power_selection_ = ToshibaPowerSelection::POWER_100;
-                break;
-            default:
-                ESP_LOGE(TAG, "Unexpected power selection: %d", power);
-                return;
-        }
+           case 0:
+               new_selection = ToshibaPowerSelection::POWER_50;
+               break;
+           case 1:
+               new_selection = ToshibaPowerSelection::POWER_75;
+               break;
+           case 2:
+               new_selection = ToshibaPowerSelection::POWER_100;
+               break;
+           default:
+               ESP_LOGE(TAG, "Unexpected power selection: %d", power);
+               return;
+       }
 
-        this->request_write_register_(ToshibaCommand::POWER_SELECT, this->internal_power_selection_);
-    }
+    // Skip write if value unchanged (prevents write-back loop when AC
+    // sends spontaneous power select push notifications)
+    if (new_selection == this->internal_power_selection_) {
+        ESP_LOGD(TAG, "power select unchanged, skipping write");
+           return;
+       }
+
+    this->internal_power_selection_ = new_selection;
+    this->request_write_register_(ToshibaCommand::POWER_SELECT, this->internal_power_selection_);
+}
 
     void set_swing_mode_select(int mode) {
         if (!is_initialized_) {
